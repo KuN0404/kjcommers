@@ -16,4 +16,5 @@ class ViewUser extends ViewRecord
             Actions\EditAction::make(),
         ];
     }
+
 }

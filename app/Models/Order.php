@@ -12,7 +12,7 @@ class Order extends Model
     protected $fillable = ['buyer_id', 'order_number', 'status', 'total_amount'];
 
     // Eager load items and buyer
-    protected array $with = ['buyer', 'orderItems.product'];
+    protected $with = ['buyer', 'orderItems.product'];
 
     public function buyer()
     {

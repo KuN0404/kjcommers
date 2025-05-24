@@ -11,7 +11,7 @@ class Product extends Model
 
     protected $fillable = ['seller_id', 'category_id', 'name', 'slug', 'description', 'price', 'stock', 'is_active'];
 
-    protected array $with = ['category', 'productImages'];
+    protected $with = ['category', 'productImages'];
 
     public function seller()
     {

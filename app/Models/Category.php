@@ -12,7 +12,7 @@ class Category extends Model
     protected $fillable = ['name', 'slug', 'parent_id'];
 
     // Eager load children categories
-    protected array $with = ['children'];
+    protected $with = ['children'];
 
     public function parent()
     {

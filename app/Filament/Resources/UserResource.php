@@ -9,17 +9,21 @@ use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use function Laravel\Prompts\text;
+use Spatie\Permission\Models\Role;
+use Filament\Forms\Components\Select;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
+
 use Illuminate\Database\Eloquent\Builder;
 use App\Filament\Resources\UserResource\Pages;
-
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\UserResource\RelationManagers;
 
 class UserResource extends Resource
 {
+    protected static ?string $navigationLabel = 'Kelola Pengguna';
+
     protected static ?string $model = User::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
@@ -54,17 +58,14 @@ class UserResource extends Resource
                     ->same('password')
                     ->minLength(8)
                     ->maxLength(255),
-                Forms\Components\Select::make('role')
-                    ->options([
-                        'admin' => 'Admin',
-                        'seller' => 'Seller',
-                        'buyer' => 'Buyer',
-                    ])
+                Select::make('role')
+                    ->label('Role')
+                    ->options(Role::all()->pluck('name', 'name')) // pakai nama sebagai key
                     ->required()
-                    ->placeholder('Pilih role')
                     ->searchable()
-                    ->reactive()
-                    ->columnSpanFull(),
+                    ->default(fn ($record) => $record?->getRoleNames()->first() ?? null)
+                    ->dehydrated(false)
+                    ->extraAttributes(['style' => 'text-transform: capitalize']),
             ]);
     }
 
@@ -84,11 +85,13 @@ class UserResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->limit(20),
-                TextColumn::make('role')
+                TextColumn::make('roles')
                     ->label('Role')
+                    ->formatStateUsing(fn ($record) => $record->getRoleNames()->join(', '))
                     ->sortable()
                     ->searchable()
-                    ->formatStateUsing(fn (string $state): string => ucwords($state)),
+                    ->limit(20)
+                    ->extraAttributes(['style' => 'text-transform: capitalize']),
                 TextColumn::make('created_at')
                     ->label('Dibuat pada')
                     // ->dateTime()

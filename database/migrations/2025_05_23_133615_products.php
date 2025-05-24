@@ -20,7 +20,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->decimal('price', 10, 2)->default(0.00);
             $table->integer('stock')->default(0);
-            $table->boolean('is_active')->default(true);
+            $table->boolean('is_active')->default(TRUE);
             $table->timestamps();
             $table->foreign('seller_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('category_id')->references('id')->on('categories')->onDelete('cascade');

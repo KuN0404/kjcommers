@@ -16,4 +16,13 @@ class ListCategories extends ListRecords
             Actions\CreateAction::make(),
         ];
     }
+
+    public function getTitle(): string
+    {
+        return 'Daftar Kategori';
+    }
+    // public function getBreadcrumb(): string
+    // {
+    //     return 'Kategori';
+    // }
 }
