@@ -9,7 +9,11 @@ class Category extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug', 'parent_id'];
+    protected $fillable = ['name', 'slug', 'parent_id', 'is_active'];
+    protected $casts = [
+        'is_active' => 'boolean',
+        'parent_id' => 'integer',
+    ];
 
     // Eager load children categories
     protected $with = ['children'];

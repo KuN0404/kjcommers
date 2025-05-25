@@ -6,6 +6,7 @@ use Filament\Forms;
 use Filament\Tables;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
+use Illuminate\Support\Str;
 use Filament\Resources\Resource;
 use Spatie\Permission\Models\Role;
 use Filament\Tables\Columns\TextColumn;
@@ -19,7 +20,7 @@ class RoleResource extends Resource
 {
     protected static ?string $model = Role::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-user';
 
     public static function form(Form $form): Form
     {
@@ -33,7 +34,11 @@ class RoleResource extends Resource
     {
         return $table
             ->columns([
-               TextColumn::make('name')->sortable()->searchable(),
+               TextColumn::make('name')
+                ->label('Nama Role')
+                ->sortable()
+                ->searchable()
+                ->formatStateUsing(fn (?string $state): string => $state ? Str::title($state) : ''),
             ])
             ->filters([
                 //

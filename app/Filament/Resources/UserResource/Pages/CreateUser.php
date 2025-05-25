@@ -11,8 +11,8 @@ class CreateUser extends CreateRecord
     protected static string $resource = UserResource::class;
     public function afterCreate(): void
 {
-    if ($this->data['role']) {
-        $this->record->syncRoles([$this->data['role']]);
-    }
+    // if ($this->data['role']) {
+    //     $this->record->syncRoles([$this->data['role']]);
+    // }
 }
 }

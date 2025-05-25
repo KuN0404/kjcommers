@@ -12,7 +12,7 @@ class ShippingAddress extends Model
     protected $fillable = ['user_id', 'order_id', 'recipient_name', 'address_line1', 'address_line2', 'city', 'state', 'postal_code', 'country', 'phone'];
 
     // Eager load user and order
-    protected array $with = ['user'];
+    protected $with = ['user'];
 
     public function user()
     {

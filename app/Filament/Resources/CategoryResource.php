@@ -4,14 +4,18 @@ namespace App\Filament\Resources;
 
 use Filament\Forms;
 use Filament\Tables;
+use Filament\Forms\Set;
 use App\Models\Category;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
+use Illuminate\Support\Str;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Tables\Columns\BooleanColumn;
 use App\Filament\Resources\CategoryResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\CategoryResource\RelationManagers;
@@ -25,7 +29,7 @@ class CategoryResource extends Resource
 
     protected static ?string $model = Category::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-tag';
 
     public static function form(Form $form): Form
     {
@@ -36,25 +40,29 @@ class CategoryResource extends Resource
                 ->required()
                 ->maxLength(255)
                 ->autofocus()
-                ->placeholder('Masukkan nama kategori'),
+                ->live(onBlur: true)
+                ->placeholder('Masukkan nama kategori')
+                ->afterStateUpdated(fn (Set $set, ?string $state) => $set('slug', Str::slug($state))),
                 TextInput::make('slug')
                     ->label('Slug')
                     ->required()
                     ->maxLength(255)
                     ->placeholder('Masukkan slug kategori')
                     ->unique(Category::class, 'slug', ignoreRecord: true)
-                    ->autofocus(),
+                    ->disabled()
+                    ->dehydrated(),
                 Select::make('parent_id')
                     ->label('Induk Kategori')
                     ->options(Category::pluck('name', 'id'))
                     ->searchable()
                     ->preload()
                     ->nullable(),
-                Forms\Components\Toggle::make('is_active')
-                    ->label('Status Aktif')
+                Toggle::make('is_active')
+                    ->label('Aktif')
                     ->default(true)
-                    ->inline()
-                    ->helperText('Tandai jika kategori ini aktif'),
+                    ->onIcon('heroicon-m-check-badge')
+                    ->offIcon('heroicon-m-x-circle'),
+
             ]);
     }
 
@@ -66,7 +74,8 @@ class CategoryResource extends Resource
                     ->label('Nama Kategori')
                     ->searchable()
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->formatStateUsing(fn (?string $state): string => $state ? Str::title($state) : '')
+                    ->toggleable(isToggledHiddenByDefault: false)
                     ->wrap(),
                 TextColumn::make('slug')
                     ->label('Slug')
@@ -77,22 +86,18 @@ class CategoryResource extends Resource
                 TextColumn::make('parent.name')
                     ->label('Induk Kategori')
                     ->sortable()
-                    ->toggleable()
+                    ->formatStateUsing(fn (?string $state): string => $state ? Str::title($state) : '')
+                    ->toggleable(isToggledHiddenByDefault: false)
                     ->wrap(),
-
-                TextColumn::make('is_active')
-                    ->label('Status')
-                    ->sortable()
-                    ->badge()
-                    ->color(fn ($state) => $state ? 'success' : 'danger')
-                    ->formatStateUsing(fn ($state) => $state ? 'Aktif' : 'Tidak Aktif')
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->wrap(),
+                BooleanColumn::make('is_active')
+                    // ... (konfigurasi is_active) ...
+                    ->label('Aktif')
+                    ->sortable(),
                 TextColumn::make('created_at')
                     ->label('Dibuat Pada')
                     ->formatStateUsing(fn ($state) => $state?->diffForHumans())
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->toggleable(isToggledHiddenByDefault: false)
                     ->wrap(),
                 TextColumn::make('updated_at')
                     ->label('Diperbarui Pada')
