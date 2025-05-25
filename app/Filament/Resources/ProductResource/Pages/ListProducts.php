@@ -16,4 +16,8 @@ class ListProducts extends ListRecords
             Actions\CreateAction::make(),
         ];
     }
+            public function getTitle(): string
+    {
+        return 'Daftar Produk';
+    }
 }
