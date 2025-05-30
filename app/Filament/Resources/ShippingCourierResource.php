@@ -2,13 +2,14 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\ShippingCourierResource\Pages;
-use App\Models\ShippingCourier;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use App\Models\ShippingCourier;
+use Filament\Resources\Resource;
+use Illuminate\Support\Facades\Auth;
+use App\Filament\Resources\ShippingCourierResource\Pages;
 
 class ShippingCourierResource extends Resource
 {
@@ -19,6 +20,11 @@ class ShippingCourierResource extends Resource
     protected static ?string $label = 'Jasa Pengiriman';
     protected static ?string $pluralLabel = 'Jasa Pengiriman';
     protected static ?int $navigationSort = 1;
+
+    public static function canViewNavigation(): bool // Kontrol visibilitas menu
+    {
+        return Auth::user()->hasRole('admin'); // Hanya admin
+    }
 
     public static function form(Form $form): Form
     {

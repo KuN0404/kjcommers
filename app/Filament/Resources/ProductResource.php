@@ -2,17 +2,19 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\ProductResource\Pages;
-use App\Filament\Resources\ProductResource\RelationManagers\ProductImagesRelationManager;
-use App\Models\Product;
-use App\Models\User; // Untuk filter seller
 use Filament\Forms;
-use Filament\Forms\Form;
+use Filament\Tables;
+use App\Models\Product;
 use Filament\Forms\Set;
+use Filament\Forms\Form;
+use Filament\Tables\Table;
 use Illuminate\Support\Str;
 use Filament\Resources\Resource;
-use Filament\Tables;
-use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use App\Models\User; // Untuk filter seller
+use Illuminate\Support\Facades\Auth;
+use App\Filament\Resources\ProductResource\Pages;
+use App\Filament\Resources\ProductResource\RelationManagers\ProductImagesRelationManager;
 
 class ProductResource extends Resource
 {
@@ -26,6 +28,9 @@ class ProductResource extends Resource
 
     public static function form(Form $form): Form
     {
+        $loggedInUser = Auth::user();
+        $isAdmin = $loggedInUser && $loggedInUser->hasRole('admin');
+
         return $form
             ->schema([
                 Forms\Components\Group::make()
@@ -70,10 +75,28 @@ class ProductResource extends Resource
                             ->schema([
                                 Forms\Components\Select::make('seller_id')
                                     ->label('Penjual (Seller)')
-                                    ->relationship('seller', 'name')
-                                    // ->options(User::role('seller')->pluck('name', 'id')) // Jika ingin membatasi hanya user dengan role seller
-                                    ->searchable()
-                                    ->preload()
+                                    ->relationship(
+                                        name: 'seller',
+                                        titleAttribute: 'name',
+                                        modifyQueryUsing: function (Builder $query) use ($isAdmin, $loggedInUser) {
+                                            if ($isAdmin) {
+                                            //     // Admin bisa memilih dari semua user atau user dengan peran 'seller'
+                                            //     // Contoh: hanya user dengan peran 'seller'
+                                            //     // return $query->whereHas('roles', fn ($q) => $q->where('name', 'seller'));
+                                            //     return $query; // Admin dapat memilih dari semua user
+                                            // }
+                                            // // Untuk non-admin, query ini memastikan hanya diri mereka sendiri yang relevan
+                                            // // meskipun fieldnya akan di-disable.
+                                            return $query->where('id', $loggedInUser ? $loggedInUser->id : null);
+                                        }
+                                    }
+                                    )
+                                    ->default(fn () => $loggedInUser ? $loggedInUser->id : null) // Default ke ID user yang login
+                                    // ->disabled(!$isAdmin) // Tidak bisa diubah jika bukan admin
+                                    ->disabled()
+                                    ->dehydrated() // Pastikan nilai ini dikirim saat menyimpan
+                                    ->searchable($isAdmin) // Hanya admin yang bisa mencari
+                                    ->preload($isAdmin)    // Hanya admin yang bisa preload
                                     ->required(),
                                 Forms\Components\Select::make('category_id')
                                     ->label('Kategori')
@@ -126,6 +149,21 @@ class ProductResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+
+
+    public static function getEloquentQuery(): Builder // Pembatasan data untuk Seller
+    {
+        $query = parent::getEloquentQuery();
+        $user = Auth::user();
+
+        if ($user && $user->hasRole('seller')) {
+            $query->where('seller_id', $user->id);
+        }
+        // Admin melihat semua, Buyer tidak melihat resource ini di navigasi
+
+        return $query;
     }
 
     public static function getRelations(): array

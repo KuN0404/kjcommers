@@ -15,7 +15,13 @@ return new class extends Migration
                 $table->id();
                 $table->foreignId('buyer_id')->constrained('users')->onDelete('cascade');
                 $table->string('order_number')->unique();
-                $table->enum('status', ['pending','processing','completed','cancelled','refunded'])->default('pending');
+                $table->enum('status', [
+                    'pending',
+                    'processing',
+                    'shipped', // <-- Tambahkan 'shipped' di sini
+                    'completed',
+                    'cancelled',
+                    'refunded'])->default('pending');
                 $table->decimal('total_amount', 10, 2); // Ini adalah subtotal produk sebelum ongkir
                 $table->timestamps();
             });

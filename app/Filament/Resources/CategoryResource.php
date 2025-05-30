@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 class CategoryResource extends Resource
 {
@@ -21,6 +22,11 @@ class CategoryResource extends Resource
     protected static ?string $label = 'Kategori Produk';
     protected static ?string $pluralLabel = 'Kategori Produk';
     protected static ?int $navigationSort = 2;
+
+    public static function canViewNavigation(): bool // Kontrol visibilitas menu
+    {
+        return Auth::user()->hasAnyRole(['admin', 'seller']);
+    }
 
     public static function form(Form $form): Form
     {

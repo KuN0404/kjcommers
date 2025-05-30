@@ -10,18 +10,23 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Hash;
-use Spatie\Permission\Models\Role; // Untuk Spatie Roles
+use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Auth;  // Untuk Spatie Roles
 
 class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
-    protected static ?string $navigationGroup = 'Manajemen Pengguna';
+    protected static ?string $navigationGroup = 'Manajemen Akses & Pengguna';
     protected static ?string $label = 'Pengguna';
     protected static ?string $pluralLabel = 'Pengguna';
     protected static ?int $navigationSort = 1;
 
+        public static function canViewNavigation(): bool // Kontrol visibilitas menu
+    {
+        return Auth::user()->hasRole('admin');
+    }
 
     public static function form(Form $form): Form
     {

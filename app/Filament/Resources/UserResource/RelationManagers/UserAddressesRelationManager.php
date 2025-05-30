@@ -6,6 +6,7 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth as FacadesAuthUserAddress;
 
 class UserAddressesRelationManager extends RelationManager
 {
@@ -14,6 +15,12 @@ class UserAddressesRelationManager extends RelationManager
 
     protected static ?string $label = 'Alamat';
     protected static ?string $pluralLabel = 'Alamat Pengguna';
+
+    public static function canViewNavigation(): bool
+    {
+        // Hanya admin yang bisa melihat daftar semua alamat pengguna
+        return FacadesAuthUserAddress::user()->hasRole('admin');
+    }
 
     public function form(Form $form): Form
     {

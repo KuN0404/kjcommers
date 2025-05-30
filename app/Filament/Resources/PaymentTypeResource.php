@@ -2,13 +2,14 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\PaymentTypeResource\Pages;
-use App\Models\PaymentType;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use App\Models\PaymentType;
+use Filament\Resources\Resource;
+use Illuminate\Support\Facades\Auth;
+use App\Filament\Resources\PaymentTypeResource\Pages;
 
 class PaymentTypeResource extends Resource
 {
@@ -19,6 +20,11 @@ class PaymentTypeResource extends Resource
     protected static ?string $label = 'Tipe Pembayaran';
     protected static ?string $pluralLabel = 'Tipe Pembayaran';
     protected static ?int $navigationSort = 2;
+
+        public static function canViewNavigation(): bool // Kontrol visibilitas menu
+    {
+        return Auth::user()->hasRole('admin'); // Hanya admin
+    }
 
     public static function form(Form $form): Form
     {

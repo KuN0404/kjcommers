@@ -1,13 +1,14 @@
 <?php
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\UnitResource\Pages;
-use App\Models\Unit;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
+use App\Models\Unit;
 use Filament\Tables;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use Filament\Resources\Resource;
+use Illuminate\Support\Facades\Auth;
+use App\Filament\Resources\UnitResource\Pages;
 
 class UnitResource extends Resource
 {
@@ -18,6 +19,11 @@ class UnitResource extends Resource
     protected static ?string $label = 'Satuan Produk';
     protected static ?string $pluralLabel = 'Satuan Produk';
     protected static ?int $navigationSort = 3;
+
+     public static function canViewNavigation(): bool // Kontrol visibilitas menu
+    {
+        return Auth::user()->hasAnyRole(['admin', 'seller']);
+    }
 
     public static function form(Form $form): Form
     {
