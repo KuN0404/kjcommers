@@ -2,106 +2,84 @@
 
 namespace App\Filament\Resources\OrderResource\RelationManagers;
 
-use App\Models\Product;
-use App\Models\Order;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Models\Product;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
+use Illuminate\Database\Eloquent\Model; // Untuk $ownerRecord
 
 class OrderItemsRelationManager extends RelationManager
 {
-    protected static string $relationship = 'orderItems';
+    protected static string $relationship = 'items';
+    protected static ?string $recordTitleAttribute = 'id';
+
+    protected static ?string $label = 'Item Pesanan';
+    protected static ?string $pluralLabel = 'Item Pesanan';
 
     public function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Select::make('product_id')
-                    ->relationship('product', 'name')
+                    ->label('Produk')
+                    ->options(Product::query()->where('is_active', true)->pluck('name', 'id'))
                     ->searchable()
                     ->preload()
-                    ->required()
-                    ->reactive()
-                    ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
-                        $product = Product::find($state);
-                        $quantity = $get('quantity') ?? 1;
-                        if ($product) {
-                            $unitPrice = $product->price ?? 0;
-                            $set('unit_price', $unitPrice);
-                            $set('subtotal', $unitPrice * $quantity);
-                        } else {
-                            $set('unit_price', 0);
-                            $set('subtotal', 0);
+                    ->live()
+                    ->afterStateUpdated(function (Set $set, Get $get, ?string $state, RelationManager $livewire) {
+                        if ($state) {
+                            $product = Product::find($state);
+                            if ($product) {
+                                $set('unit_price', $product->price);
+                                $quantity = $get('quantity') ?: 1;
+                                $set('subtotal', $product->price * $quantity);
+                            }
                         }
+                        $livewire->dispatch('updateOrderTotal'); // Kirim event untuk update total order
                     })
-                    ->label('Produk')
-                    ->columnSpan([
-                        'md' => 2,
-                    ]),
-                Forms\Components\TextInput::make('quantity')
                     ->required()
+                    ->reactive(),
+                Forms\Components\TextInput::make('quantity')
+                    ->label('Jumlah')
                     ->numeric()
                     ->minValue(1)
                     ->default(1)
-                    ->reactive()
-                    ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
-                        $unitPrice = $get('unit_price') ?? 0;
-                        $quantity = $get('quantity') ?? 0;
-                        $set('subtotal', $unitPrice * $quantity);
+                    ->live(onBlur: true)
+                    ->afterStateUpdated(function (Set $set, Get $get, ?string $state, RelationManager $livewire) {
+                        $unitPrice = $get('unit_price') ?: 0;
+                        $quantity = $state ?: 1;
+                        $set('subtotal', (float)$unitPrice * (int)$quantity);
+                        $livewire->dispatch('updateOrderTotal'); // Kirim event untuk update total order
                     })
-                    ->label('Jumlah')
-                    ->columnSpan([
-                        'md' => 1,
-                    ]),
+                    ->required()
+                    ->reactive(),
                 Forms\Components\TextInput::make('unit_price')
-                    ->required()
-                    ->numeric()
-                    ->prefix('Rp')
-                    ->readOnly()
-                    ->dehydrated()
                     ->label('Harga Satuan')
-                    ->columnSpan([
-                        'md' => 1,
-                    ]),
-                Forms\Components\TextInput::make('subtotal')
-                    ->required()
                     ->numeric()
                     ->prefix('Rp')
-                    ->readOnly()
-                    ->dehydrated()
-                    ->label('Subtotal')
-                    ->columnSpan([
-                        'md' => 2,
-                    ]),
+                    ->disabled()
+                    ->required(),
+                Forms\Components\TextInput::make('subtotal')
+                    ->label('Subtotal Item')
+                    ->numeric()
+                    ->prefix('Rp')
+                    ->disabled()
+                    ->required(),
             ])->columns(2);
     }
 
     public function table(Table $table): Table
     {
         return $table
-            ->recordTitleAttribute('id')
             ->columns([
-                Tables\Columns\TextColumn::make('product.name')
-                    ->label('Produk')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('quantity')
-                    ->label('Jumlah')
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('unit_price')
-                    ->money('IDR', true)
-                    ->label('Harga Satuan')
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subtotal')
-                    ->money('IDR', true)
-                    ->label('Subtotal')
-                    ->sortable()
-                    ->summarize(Tables\Columns\Summarizers\Sum::make()->money('IDR', true)),
+                Tables\Columns\TextColumn::make('product.name')->label('Produk')->searchable(),
+                Tables\Columns\TextColumn::make('quantity')->label('Jumlah')->alignCenter(),
+                Tables\Columns\TextColumn::make('unit_price')->label('Harga Satuan')->money('idr'),
+                Tables\Columns\TextColumn::make('subtotal')->label('Subtotal Item')->money('idr'),
             ])
             ->filters([
                 //
@@ -109,59 +87,60 @@ class OrderItemsRelationManager extends RelationManager
             ->headerActions([
                 Tables\Actions\CreateAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
-                        $product = Product::find($data['product_id']);
-                        if ($product) {
-                            $data['unit_price'] = $product->price ?? 0;
-                            $data['subtotal'] = ($product->price ?? 0) * ($data['quantity'] ?? 1);
+                        if (isset($data['product_id']) && isset($data['quantity'])) {
+                            $product = Product::find($data['product_id']);
+                            if ($product) {
+                                $data['unit_price'] = $product->price;
+                                $data['subtotal'] = $product->price * $data['quantity'];
+                            }
                         }
                         return $data;
                     })
-                    ->after(function () {
-                        $this->updateOrderTotalAmount();
-                    }),
+                    ->after(fn (RelationManager $livewire) => $livewire->dispatch('updateOrderTotal')),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
-                    ->mutateFormDataUsing(function (array $data, Model $record): array {
-                        $productId = $data['product_id'] ?? $record->product_id;
-                        $product = Product::find($productId);
-                        if ($product) {
-                             $data['unit_price'] = $data['unit_price'] ?? ($product->price ?? 0); // Jaga unit_price jika produk tidak diubah
+                    ->mutateFormDataUsing(function (array $data): array {
+                        if (isset($data['product_id']) && isset($data['quantity'])) {
+                            $product = Product::find($data['product_id']);
+                            if ($product) {
+                                $data['unit_price'] = $product->price;
+                                $data['subtotal'] = $product->price * $data['quantity'];
+                            }
                         }
-                        $data['subtotal'] = ($data['unit_price'] ?? 0) * ($data['quantity'] ?? 1);
                         return $data;
                     })
-                    ->after(function () {
-                        $this->updateOrderTotalAmount();
-                    }),
+                    ->after(fn (RelationManager $livewire) => $livewire->dispatch('updateOrderTotal')),
                 Tables\Actions\DeleteAction::make()
-                    ->after(function () {
-                        $this->updateOrderTotalAmount();
-                    }),
+                    ->after(fn (RelationManager $livewire) => $livewire->dispatch('updateOrderTotal')),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
-                        ->after(function () {
-                            $this->updateOrderTotalAmount();
-                        }),
+                        ->after(fn (RelationManager $livewire) => $livewire->dispatch('updateOrderTotal')),
                 ]),
-            ])
-            ->modifyQueryUsing(fn (Builder $query) => $query->with('product'));
+            ]);
     }
 
-    protected function updateOrderTotalAmount(): void
+    // Untuk mengupdate total_amount di OrderResource setelah item berubah
+    protected function getListeners(): array
+    {
+        return array_merge(
+            parent::getListeners(),
+            ['updateOrderTotal' => 'updateOwnerRecordTotalAmount']
+        );
+    }
+
+    public function updateOwnerRecordTotalAmount(): void
     {
         $order = $this->getOwnerRecord();
-        if ($order instanceof Order) {
-            $total = $order->orderItems()->sum('subtotal'); // Hitung dari database untuk akurasi
-            $order->total_amount = $total;
-            $order->saveQuietly();
-
-            // Untuk me-refresh form utama di OrderResource (jika sedang di halaman edit Order)
-            // agar field total_amount di sana juga terupdate secara visual.
-            if (method_exists($this->getLivewire(), 'dispatch')) {
-                 $this->getLivewire()->dispatch('refreshOrderForm');
+        if ($order instanceof \App\Models\Order) {
+            $newTotalAmount = $order->items()->sum('subtotal');
+            $order->update(['total_amount' => $newTotalAmount]);
+            // Ini akan merefresh data di form Order jika sedang di halaman edit/view
+            $this->dispatch('refresh');
+            if (method_exists($this->getLivewire(), 'refreshForm')) {
+                 $this->getLivewire()->refreshForm();
             }
         }
     }

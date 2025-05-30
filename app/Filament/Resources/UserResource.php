@@ -1,137 +1,91 @@
 <?php
-
 namespace App\Filament\Resources;
 
-use Filament\Forms;
-use App\Models\User;
-use Filament\Tables;
-use Filament\Forms\Form;
-use Filament\Tables\Table;
-use Illuminate\Support\Str;
-use Filament\Resources\Resource;
-use function Laravel\Prompts\text;
-use Spatie\Permission\Models\Role;
-use Illuminate\Support\Facades\Hash;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Toggle;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Forms\Components\TextInput;
-use Filament\Tables\Filters\SelectFilter;
-use Illuminate\Database\Eloquent\Builder;
-use Filament\Tables\Columns\BooleanColumn;
-use Filament\Tables\Filters\TernaryFilter;
 use App\Filament\Resources\UserResource\Pages;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\UserResource\RelationManagers;
+use App\Filament\Resources\UserResource\RelationManagers\UserAddressesRelationManager;
+use App\Models\User;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role; // Untuk Spatie Roles
 
 class UserResource extends Resource
 {
-    protected static ?string $navigationLabel = 'Kelola Pengguna';
-
     protected static ?string $model = User::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-user-group';
+    protected static ?string $navigationIcon = 'heroicon-o-users';
+    protected static ?string $navigationGroup = 'Manajemen Pengguna';
+    protected static ?string $label = 'Pengguna';
+    protected static ?string $pluralLabel = 'Pengguna';
+    protected static ?int $navigationSort = 1;
+
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                TextInput::make('name')
+                Forms\Components\TextInput::make('name')
                     ->label('Nama')
                     ->required()
                     ->maxLength(255)
-                    ->autofocus()
-                    ->placeholder('Masukkan nama lengkap pengguna'),
-                TextInput::make('email')
+                    ->columnSpanFull(),
+                Forms\Components\TextInput::make('email')
                     ->label('Email')
                     ->email()
                     ->required()
-                    ->unique(table: User::class, ignorable: fn ($record): ?User => $record)
                     ->maxLength(255)
-                    ->placeholder('Masukkan email pengguna'),
-                TextInput::make('password')
+                    ->unique(User::class, 'email', ignoreRecord: true)
+                    ->columnSpanFull(),
+                Forms\Components\DateTimePicker::make('email_verified_at')
+                    ->label('Email Terverifikasi Pada')
+                    ->columnSpanFull(),
+                Forms\Components\TextInput::make('password')
+                    ->label('Password')
                     ->password()
-                    // Hanya required saat membuat user baru
+                    ->dehydrateStateUsing(fn (string $state): string => Hash::make($state))
+                    ->dehydrated(fn (?string $state): bool => filled($state))
                     ->required(fn (string $operation): bool => $operation === 'create')
-                    // Hanya kirim ke backend jika diisi (untuk update) atau saat create
-                    ->dehydrateStateUsing(fn ($state) => filled($state) ? Hash::make($state) : null)
-                    ->dehydrated(fn ($state) => filled($state)) // Hanya dehydrate jika diisi
-                    ->minLength(8)
                     ->maxLength(255)
-                    ->placeholder('Kosongkan jika tidak ingin mengubah password'),
-                TextInput::make('passwordConfirmation')
+                    ->confirmed() // Menambahkan konfirmasi password
+                    ->columnSpanFull(),
+                Forms\Components\TextInput::make('password_confirmation') // Field konfirmasi
+                    ->label('Konfirmasi Password')
                     ->password()
-                     // Hanya required saat membuat user baru atau jika password diisi
-                    ->required(fn (string $operation, Forms\Get $get): bool => $operation === 'create' || filled($get('password')))
-                    ->dehydrated(false) // Tidak perlu disimpan ke database
-                    ->same('password')
-                    ->label('Konfirmasi Password'),
-                Select::make('roles') // Ubah ke 'roles' (plural) untuk konsistensi dengan Spatie
-                    ->label('Role')
-                    //->multiple() // Jika user bisa punya banyak role
-                    ->relationship(titleAttribute: 'name') // Gunakan relationship untuk Spatie
-                    ->options(Role::all()->pluck('name', 'id')) // Gunakan ID sebagai key untuk relationship
-                    ->preload() // Preload role, karena jumlahnya biasanya tidak banyak
-                    ->searchable()
-                    // ->default(fn ($record) => $record?->roles->pluck('id')->all() ?? []) // Untuk multiple
-                    ->default(fn ($record) => $record?->roles->first()?->id ?? null) // Jika hanya 1 role yg mau diedit disini, dan Select tidak multiple
-                    ->required(), // Sesuaikan jika user wajib punya role
-                Toggle::make('is_active')
-                    ->label('Active')
+                    ->required(fn (string $operation): bool => $operation === 'create')
+                    ->visible(fn (string $operation): bool => $operation === 'create' || $operation === 'edit')
+                    ->dehydrated(false) // Agar tidak disimpan ke database
+                    ->columnSpanFull(),
+                Forms\Components\Toggle::make('is_active')
+                    ->label('Aktif')
                     ->default(true)
-                    ->onIcon('heroicon-m-check-badge')
-                    ->offIcon('heroicon-m-x-circle'),
+                    ->required(),
+                Forms\Components\Select::make('roles') // Untuk Spatie Roles
+                    ->label('Peran')
+                    ->multiple()
+                    ->relationship('roles', 'name')
+                    ->options(Role::pluck('name', 'id'))
+                    ->preload()
+                    ->columnSpanFull(),
             ]);
     }
+
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-                TextColumn::make('name')
-                    ->label('Nama')
-                    ->searchable()
-                    ->sortable()
-                    ->formatStateUsing(fn (string $state): string => ucwords($state))
-                    ->tooltip('Nama lengkap pengguna')
-                    ->limit(20),
-                TextColumn::make('email')
-                    ->label('Email')
-                    ->searchable()
-                    ->sortable()
-                    ->limit(20)
-                    ->copyable()
-                    ->copyMessage('Email disalin!'),
-                TextColumn::make('roles.name') // Akses nama role melalui relasi
-                    ->label('Role')
-                    ->badge() // Tampilkan sebagai badge
-                    ->formatStateUsing(fn ($state) => Str::title($state))
-                    ->listWithLineBreaks() // jika ada multiple roles
-                    ->limitList(2)
-                    ->expandableLimitedList()
-                    ->searchable()
-                    ->sortable(),
-                BooleanColumn::make('is_active') // atau IconColumn
-                    ->label('Active')
-                    ->sortable(),
-                TextColumn::make('created_at')
-                    ->label('Dibuat pada')
-                    ->formatStateUsing(fn ($state) => $state?->translatedFormat('d M Y, H:i')) // Format lebih baik
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true), // Sembunyikan defaultnya
-                TextColumn::make('updated_at')
-                    ->label('Diubah pada')
-                    ->formatStateUsing(fn ($state) => $state?->translatedFormat('d M Y, H:i'))
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true), // Sembunyikan defaultnya
+                Tables\Columns\TextColumn::make('name')->label('Nama')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('email')->label('Email')->searchable(),
+                Tables\Columns\TextColumn::make('roles.name')->label('Peran')->badge(),
+                Tables\Columns\IconColumn::make('is_active')->label('Aktif')->boolean(),
+                Tables\Columns\TextColumn::make('email_verified_at')->label('Terverifikasi')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('created_at')->label('Dibuat')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('roles')
-                    ->relationship('roles', 'name')
-                    ->multiple()
-                    ->label('Filter Role'),
-                Tables\Filters\TernaryFilter::make('is_active')
-                    ->label('Status Aktif'),
+                Tables\Filters\SelectFilter::make('roles')->relationship('roles', 'name')->label('Peran'),
+                Tables\Filters\TernaryFilter::make('is_active')->label('Status Aktif'),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
@@ -145,15 +99,10 @@ class UserResource extends Resource
             ]);
     }
 
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()->with('roles');
-    }
-
     public static function getRelations(): array
     {
         return [
-            //
+            UserAddressesRelationManager::class,
         ];
     }
 

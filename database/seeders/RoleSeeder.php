@@ -13,19 +13,31 @@ class RoleSeeder extends Seeder
     /**
      * Run the database seeds.
      */
-    public function run(): void
+   public function run(): void
     {
         // Reset cached roles and permissions
-        // app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        // Ini penting jika Anda sering mengubah roles/permissions dan menjalankan seeder berulang kali
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
         // Membuat Roles
-        $adminRole = Role::create(['name' => 'admin']);
-        $sellerRole = Role::create(['name' => 'seller']);
-        $buyerRole = Role::create(['name' => 'buyer']);
+        Role::create(['name' => 'admin', 'guard_name' => 'web']);
+        Role::create(['name' => 'seller', 'guard_name' => 'web']);
+        Role::create(['name' => 'buyer', 'guard_name' => 'web']);
 
-        // Anda bisa menambahkan permission di sini jika diperlukan dan menetapkannya ke role
-        // Contoh:
-        // $manageUsersPermission = Permission::create(['name' => 'manage users']);
-        // $adminRole->givePermissionTo($manageUsersPermission);
+        // Contoh jika Anda ingin membuat permission dan menetapkannya ke role admin:
+        // Permission::create(['name' => 'manage users', 'guard_name' => 'web']);
+        // Permission::create(['name' => 'manage products', 'guard_name' => 'web']);
+        // Permission::create(['name' => 'view orders', 'guard_name' => 'web']);
+
+        // $adminRole = Role::findByName('admin');
+        // $adminRole->givePermissionTo(['manage users', 'manage products', 'view orders']);
+
+        // $sellerRole = Role::findByName('seller');
+        // $sellerRole->givePermissionTo(['manage products', 'view orders']);
+
+        // $buyerRole = Role::findByName('buyer');
+        // $buyerRole->givePermissionTo('view orders');
+
+        $this->command->info('Roles seeded successfully!');
     }
 }

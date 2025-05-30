@@ -3,164 +3,126 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\OrderResource\Pages;
-use App\Filament\Resources\OrderResource\RelationManagers;
+use App\Filament\Resources\OrderResource\RelationManagers\OrderItemsRelationManager;
+use App\Filament\Resources\OrderResource\RelationManagers\PaymentRelationManager; // Tambah ini
 use App\Models\Order;
-use App\Models\User;
-use App\Models\Product;
+use App\Models\UserAddress;
+use App\Models\Product; // Untuk kalkulasi total
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model; // Diperlukan untuk type hint pada action
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Illuminate\Support\Str; // Untuk Str::random()
-use Carbon\Carbon; // Untuk format tanggal
-use Filament\Notifications\Notification; // Untuk notifikasi setelah ubah status
 
 class OrderResource extends Resource
 {
     protected static ?string $model = Order::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
+    protected static ?string $navigationGroup = 'Manajemen Pesanan';
+    protected static ?string $label = 'Pesanan';
+    protected static ?string $pluralLabel = 'Pesanan';
+    protected static ?int $navigationSort = 1;
 
-    protected static ?string $navigationGroup = 'Shop';
-
-    protected static ?int $navigationSort = 2;
-
-    public static function form(Form $form): Form
+  public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Informasi Pesanan')
-                    ->schema([
-                        Forms\Components\Select::make('buyer_id')
-                            ->relationship(
-                                name: 'buyer',
-                                titleAttribute: 'name',
-                                modifyQueryUsing: fn (Builder $query) => $query->whereHas('roles', function (Builder $roleQuery) {
-                                    $roleQuery->where('name', 'buyer');
+                Forms\Components\Wizard::make([
+                    // ... Step 'Informasi Pembeli & Pengiriman' ...
+                    Forms\Components\Wizard\Step::make('Informasi Pembeli & Pengiriman')
+                        ->schema([
+                            Forms\Components\Select::make('buyer_id')
+                                ->label('Pembeli')
+                                // ->relationship('buyer', 'name'
+                                    ->relationship(
+                                name: 'buyer', // Nama relasi di model Order
+                                titleAttribute: 'name', // Atribut yang ditampilkan di dropdown
+                                // --- AWAL MODIFIKASI UNTUK FILTER BUYER ---
+                                modifyQueryUsing: fn (Builder $query) => $query->whereHas('roles', function ($subQuery) {
+                                    $subQuery->where('name', 'buyer'); // Hanya user dengan role 'buyer'
                                 })
+                                // --- AKHIR MODIFIKASI ---
                             )
-                            ->searchable()
-                            ->preload()
-                            ->required()
-                            ->label('Pembeli')
-                            ->columnSpan(1),
-                        Forms\Components\TextInput::make('order_number')
-                            ->label('Nomor Pesanan')
-                            ->required()
-                            ->disabled()
-                            ->dehydrated(true)
-                            ->default(function () {
-                                $maxTries = 5;
-                                $attempt = 0;
-                                do {
-                                    $orderNumber = 'TRX-' . Carbon::now()->format('Ymd') . '-' . strtoupper(Str::random(10));
-                                    $attempt++;
-                                    if ($attempt > $maxTries) {
-                                        // Fallback jika setelah beberapa kali masih gagal (sangat jarang terjadi)
-                                        return 'TRX-' . Carbon::now()->format('YmdHisu') . '-' . strtoupper(Str::random(5));
+                                ->searchable()
+                                ->preload()
+                                ->live()
+                                ->required()
+                                ->columnSpanFull(),
+                            Forms\Components\Select::make('shipping_address_id')
+                                ->label('Alamat Pengiriman')
+                                ->options(function (Get $get) {
+                                    $buyerId = $get('buyer_id');
+                                    if ($buyerId) {
+                                        return UserAddress::where('user_id', $buyerId)->get()->mapWithKeys(function ($address) {
+                                            return [$address->id => "{$address->label} - {$address->recipient_name}, {$address->address_line1}, {$address->city_regency}"];
+                                        });
                                     }
-                                } while (Order::where('order_number', $orderNumber)->exists());
-                                return $orderNumber;
-                            })
-                            ->unique(Order::class, 'order_number', ignoreRecord: true)
-                            ->maxLength(255)
-                            ->columnSpan(1),
+                                    return [];
+                                })
+                                ->searchable()
+                                ->live()
+                                ->required(fn (Get $get) => filled($get('buyer_id')))
+                                ->disabled(fn (Get $get) => !filled($get('buyer_id')))
+                                ->helperText('Pilih pembeli terlebih dahulu untuk memuat alamat.'),
+                            Forms\Components\Select::make('shipping_courier_id')
+                                ->label('Jasa Pengiriman')
+                                ->relationship('shippingCourier', 'name')
+                                ->searchable()
+                                ->preload()
+                                ->required(),
+                            Forms\Components\TextInput::make('shipping_cost')
+                                ->label('Biaya Pengiriman')
+                                ->numeric()
+                                ->prefix('Rp')
+                                ->live(onBlur: true)
+                                ->default(0.00)
+                                ->required(),
+                            Forms\Components\TextInput::make('shipping_tracking_number')
+                                ->label('Nomor Resi Pengiriman (Opsional)')
+                                ->maxLength(255),
+                        ])->columns(2),
+                    Forms\Components\Wizard\Step::make('Detail Pesanan')
+                        ->schema([
+                             Forms\Components\TextInput::make('order_number')
+                                ->label('Nomor Pesanan')
+                                ->disabled() // Dibuat otomatis oleh model
+                                ->placeholder('Akan dibuat otomatis')
+                                ->dehydrated(false) // Jangan kirim nilai dari field ini saat create
+                                // ->required() // Hapus required dari form
+                                ->maxLength(255),
+                            Forms\Components\Select::make('status')
+                                ->label('Status Pesanan')
+                                ->options([
+                                    'pending' => 'Pending (Menunggu Pembayaran)',
+                                    'processing' => 'Diproses (Pembayaran Diterima)',
+                                    'shipped' => 'Dikirim',
+                                    'completed' => 'Selesai (Diterima Pembeli)',
+                                    'cancelled' => 'Dibatalkan',
+                                    'refunded' => 'Dikembalikan (Refund)',
+                                ])
+                                ->default('pending')
+                                ->required(),
                         Forms\Components\TextInput::make('total_amount')
-                            ->required()
+                            ->label('Total Harga Produk (Subtotal)')
                             ->numeric()
                             ->prefix('Rp')
-                            ->readOnly()
-                            ->dehydrated(true)
-                            ->label('Total Bayar')
-                            ->columnSpan(1),
-                    ])->columns(2),
-
-                Forms\Components\Section::make('Item Pesanan')
-                    ->schema([
-                        Forms\Components\Repeater::make('orderItems')
-                            ->relationship()
-                            ->schema([
-                                Forms\Components\Select::make('product_id')
-                                    ->relationship('product', 'name')
-                                    ->searchable()
-                                    ->preload()
-                                    ->required()
-                                    ->reactive()
-                                    ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
-                                        $product = Product::find($state);
-                                        $quantity = $get('quantity') ?? 1;
-                                        if ($product) {
-                                            $unitPrice = $product->price ?? 0;
-                                            $set('unit_price', $unitPrice);
-                                            $set('subtotal', $unitPrice * $quantity);
-                                        } else {
-                                            $set('unit_price', 0);
-                                            $set('subtotal', 0);
-                                        }
-                                        self::updateTotalAmountBasedOnRepeater($get, $set, 'orderItems', '../../');
-                                    })
-                                    ->label('Produk')
-                                    ->columnSpan(['md' => 2]),
-                                Forms\Components\TextInput::make('quantity')
-                                    ->required()
-                                    ->numeric()
-                                    ->minValue(1)
-                                    ->default(1)
-                                    ->reactive()
-                                    ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
-                                        $unitPrice = $get('unit_price') ?? 0;
-                                        $quantity = $get('quantity') ?? 0;
-                                        $set('subtotal', $unitPrice * $quantity);
-                                        self::updateTotalAmountBasedOnRepeater($get, $set, 'orderItems', '../../');
-                                    })
-                                    ->label('Jumlah')
-                                    ->columnSpan(['md' => 1]),
-                                Forms\Components\TextInput::make('unit_price')
-                                    ->required()
-                                    ->numeric()
-                                    ->prefix('Rp')
-                                    ->readOnly()
-                                    ->dehydrated()
-                                    ->label('Harga Satuan')
-                                    ->columnSpan(['md' => 1]),
-                                Forms\Components\TextInput::make('subtotal')
-                                    ->required()
-                                    ->numeric()
-                                    ->prefix('Rp')
-                                    ->readOnly()
-                                    ->dehydrated()
-                                    ->label('Subtotal')
-                                    ->columnSpan(['md' => 2]),
-                            ])
-                            ->columns(4)
-                            ->addActionLabel('Tambah Item')
-                            ->reorderableWithButtons()
-                            ->collapsible()
-                            ->itemLabel(fn (array $state): ?string => Product::find($state['product_id'])?->name . ' (' . ($state['quantity'] ?? 0) . ')' ?? null)
-                            ->deleteAction(
-                                fn (Forms\Components\Actions\Action $action) => $action->requiresConfirmation()
-                                    ->after(function (Forms\Get $get, Forms\Set $set) {
-                                        self::updateTotalAmountBasedOnRepeater($get, $set, 'orderItems', '../../');
-                                    })
-                            )
-                            ->mutateRelationshipDataBeforeCreateUsing(function (array $data): array {
-                                $product = Product::find($data['product_id']);
-                                if ($product) {
-                                    $data['unit_price'] = $product->price ?? 0;
-                                    $data['subtotal'] = ($product->price ?? 0) * ($data['quantity'] ?? 1);
-                                }
-                                return $data;
-                            })
-                            ->reactive()
-                            ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set, $state) {
-                                self::updateTotalAmountBasedOnRepeater($get, $set, 'orderItems', '../../');
-                            })
-                            ->label(false),
-                    ])->collapsible(),
+                            ->disabled() // Tetap disabled karena dihitung dari item
+                            ->default(0.00) // Untuk tampilan awal di form
+                            // ->required() // Bisa dihapus karena model akan mengisi default 0.00
+                            ->dehydrated(fn (string $operation): bool => $operation === 'edit'),
+                            Forms\Components\Placeholder::make('grand_total_placeholder')
+                                ->label('Grand Total (Termasuk Ongkir)')
+                                ->content(function (Get $get): string {
+                                    $totalAmount = (float) $get('total_amount');
+                                    $shippingCost = (float) $get('shipping_cost');
+                                    return 'Rp ' . number_format($totalAmount + $shippingCost, 2, ',', '.');
+                                }),
+                        ])->columns(2),
+                ])->columnSpanFull(),
             ]);
     }
 
@@ -168,100 +130,42 @@ class OrderResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('order_number')
-                    ->searchable()
-                    ->sortable()
-                    ->label('Nomor Pesanan'),
-                Tables\Columns\TextColumn::make('buyer.name')
-                    ->searchable()
-                    ->sortable()
-                    ->label('Pembeli'),
-                Tables\Columns\TextColumn::make('status')
-                    ->badge()
+                Tables\Columns\TextColumn::make('order_number')->label('No. Pesanan')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('buyer.name')->label('Pembeli')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('status')->label('Status')->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'pending' => 'warning',
                         'processing' => 'info',
+                        'shipped' => 'primary',
                         'completed' => 'success',
                         'cancelled' => 'danger',
                         'refunded' => 'gray',
-                        default => 'secondary',
-                    })
-                    ->searchable()
-                    ->sortable()
-                    ->label('Status'),
-                Tables\Columns\TextColumn::make('total_amount')
-                    ->numeric(decimalPlaces: 0, decimalSeparator: ',', thousandsSeparator: '.')
-                    ->prefix('Rp ')
-                    ->sortable()
-                    ->label('Total Bayar'),
-                Tables\Columns\TextColumn::make('orderItems.product.name')
-                    ->label('Produk Dipesan')
-                    ->listWithLineBreaks()
-                    ->limitList(2)
-                    ->expandableLimitedList(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->label('Tanggal Dibuat'),
+                        default => 'gray',
+                    })->sortable(),
+                Tables\Columns\TextColumn::make('total_amount')->label('Subtotal Produk')->money('idr')->sortable(),
+                Tables\Columns\TextColumn::make('shipping_cost')->label('Ongkir')->money('idr')->sortable(),
+                Tables\Columns\TextColumn::make('grand_total') // Menggunakan accessor
+                    ->label('Grand Total')
+                    ->money('idr')
+                    ->getStateUsing(fn (Order $record): float => $record->grand_total) // Panggil accessor
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('created_at')->label('Tanggal Pesan')->dateTime()->sortable(),
             ])
             ->filters([
-                // ... filter yang sudah ada ...
+                Tables\Filters\SelectFilter::make('status')
+                    ->options([
+                        'pending' => 'Pending',
+                        'processing' => 'Diproses',
+                        'shipped' => 'Dikirim',
+                        'completed' => 'Selesai',
+                        'cancelled' => 'Dibatalkan',
+                        'refunded' => 'Dikembalikan',
+                    ])->label('Status Pesanan'),
+                Tables\Filters\SelectFilter::make('buyer_id')->relationship('buyer', 'name')->label('Pembeli'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\ActionGroup::make([
-                    Tables\Actions\Action::make('updateStatus')
-                        ->label('Ubah Status')
-                        ->icon('heroicon-o-pencil-square')
-                        ->form([
-                            Forms\Components\Select::make('new_status')
-                                ->label('Status Baru')
-                                ->options([
-                                    'pending' => 'Pending',
-                                    'processing' => 'Processing',
-                                    'completed' => 'Completed',
-                                    'cancelled' => 'Cancelled', // Opsi untuk membatalkan
-                                    'refunded' => 'Refunded',
-                                ])
-                                ->default(fn (Model $record): ?string => $record->status)
-                                ->required(),
-                        ])
-                        ->action(function (Model $record, array $data) {
-                            if (isset($data['new_status'])) {
-                                $newStatus = $data['new_status'];
-                                $currentStatus = $record->status;
-
-                                // Validasi: Tidak bisa cancel jika status completed atau refunded
-                                if ($newStatus === 'cancelled' && ($currentStatus === 'completed' || $currentStatus === 'processing'|| $currentStatus === 'refunded')) {
-                                    Notification::make()
-                                        ->title('Aksi Tidak Diizinkan')
-                                        ->body('Pesanan yang sudah selesai (completed), diproses, dan direfund tidak dapat dibatalkan.')
-                                        ->danger()
-                                        ->send();
-                                    return; // Hentikan eksekusi lebih lanjut
-                                }
-
-                                // Jika validasi lolos atau status baru bukan 'cancelled' (atau boleh di-cancel)
-                                $record->status = $newStatus;
-                                $record->save();
-                                Notification::make()
-                                    ->title('Status pesanan berhasil diubah')
-                                    ->success()
-                                    ->send();
-                            } else {
-                                Notification::make()
-                                    ->title('Gagal mengubah status')
-                                    ->body('Status baru tidak dipilih.')
-                                    ->danger()
-                                    ->send();
-                            }
-                        })
-                        ->modalHeading('Ubah Status Pesanan')
-                        ->modalButton('Simpan Perubahan Status'),
-                    Tables\Actions\DeleteAction::make(),
-                ])->icon('heroicon-m-ellipsis-vertical'),
+                Tables\Actions\ViewAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -273,7 +177,8 @@ class OrderResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\OrderItemsRelationManager::class,
+            OrderItemsRelationManager::class,
+            PaymentRelationManager::class,
         ];
     }
 
@@ -282,32 +187,8 @@ class OrderResource extends Resource
         return [
             'index' => Pages\ListOrders::route('/'),
             'create' => Pages\CreateOrder::route('/create'),
-            'view' => Pages\ViewOrder::route('/{record}'),
             'edit' => Pages\EditOrder::route('/{record}/edit'),
+            'view' => Pages\ViewOrder::route('/{record}'),
         ];
-    }
-
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->with(['buyer', 'orderItems.product']);
-    }
-
-    public static function updateTotalAmountBasedOnRepeater(Forms\Get $get, Forms\Set $set, string $repeaterName, string $pathPrefix = ''): void
-    {
-        $items = [];
-        if ($pathPrefix) {
-            $items = $get($pathPrefix . $repeaterName);
-        } else {
-            $items = $get($repeaterName);
-        }
-
-        $total = 0;
-        if (is_array($items)) {
-            foreach ($items as $item) {
-                $total += $item['subtotal'] ?? 0;
-            }
-        }
-        $set($pathPrefix . 'total_amount', $total);
     }
 }

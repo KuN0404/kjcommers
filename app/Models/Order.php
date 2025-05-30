@@ -2,32 +2,78 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\HasMany; // Pastikan ini di-import
-use App\Models\OrderItem; // Pastikan ini di-import
-use App\Models\User; // Pastikan ini di-import
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str; // Pastikan Str diimport
 
 class Order extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['buyer_id', 'order_number', 'status', 'total_amount'];
+    protected $fillable = [
+        'buyer_id',
+        'shipping_address_id',
+        'shipping_courier_id',
+        'order_number',
+        'status',
+        'total_amount', // Pastikan ini ada di $fillable
+        'shipping_cost',
+        'shipping_tracking_number',
+    ];
 
-    // Eager load items and buyer (jika masih digunakan)
-    // protected $with = ['buyer', 'orderItems.product'];
+    protected function casts(): array
+    {
+        return [
+            'total_amount' => 'decimal:2',
+            'shipping_cost' => 'decimal:2',
+        ];
+    }
 
-    public function buyer()
+    protected static function booted(): void
+    {
+        static::creating(function (Order $order) {
+            // Auto-generate order_number jika kosong
+            if (empty($order->order_number)) {
+                $order->order_number = 'ORD-' . strtoupper(Str::random(8));
+            }
+
+            // Set total_amount default ke 0.00 jika belum di-set
+            if (!isset($order->total_amount)) {
+                $order->total_amount = 0.00;
+            }
+        });
+    }
+
+    public function buyer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'buyer_id');
     }
 
-    /**
-     * Definisikan relasi orderItems.
-     * Pastikan return type hint HasMany dan model OrderItem sudah benar.
-     */
-    public function orderItems(): HasMany
+    public function shippingAddress(): BelongsTo
     {
-        return $this->hasMany(OrderItem::class, 'order_id'); // 'order_id' adalah foreign key default, bisa juga tidak ditulis jika standar
+        return $this->belongsTo(UserAddress::class, 'shipping_address_id');
+    }
+
+    public function shippingCourier(): BelongsTo
+    {
+        return $this->belongsTo(ShippingCourier::class, 'shipping_courier_id');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    public function payment(): HasOne
+    {
+        return $this->hasOne(Payment::class);
+    }
+
+    public function getGrandTotalAttribute(): float
+    {
+        return (float) $this->total_amount + (float) $this->shipping_cost;
     }
 }

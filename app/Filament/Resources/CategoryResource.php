@@ -2,67 +2,51 @@
 
 namespace App\Filament\Resources;
 
-use Filament\Forms;
-use Filament\Tables;
-use Filament\Forms\Set;
+use App\Filament\Resources\CategoryResource\Pages;
 use App\Models\Category;
+use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Tables\Table;
+use Filament\Forms\Set;
 use Illuminate\Support\Str;
 use Filament\Resources\Resource;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Toggle;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Forms\Components\TextInput;
-use Illuminate\Database\Eloquent\Builder;
-use Filament\Tables\Columns\BooleanColumn;
-use App\Filament\Resources\CategoryResource\Pages;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\CategoryResource\RelationManagers;
+use Filament\Tables;
+use Filament\Tables\Table;
 
 class CategoryResource extends Resource
 {
-    protected static ?string $navigationLabel = 'Kategori';
-
-    protected static ?int $navigationSort = 1;
-    protected static ?string $navigationGroup = 'Master Data';
-
     protected static ?string $model = Category::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-tag';
+    protected static ?string $navigationGroup = 'Manajemen Produk';
+    protected static ?string $label = 'Kategori Produk';
+    protected static ?string $pluralLabel = 'Kategori Produk';
+    protected static ?int $navigationSort = 2;
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                TextInput::make('name')
-                ->label('Nama Kategori')
-                ->required()
-                ->maxLength(255)
-                ->autofocus()
-                ->live(onBlur: true)
-                ->placeholder('Masukkan nama kategori')
-                ->afterStateUpdated(fn (Set $set, ?string $state) => $set('slug', Str::slug($state))),
-                TextInput::make('slug')
+                Forms\Components\TextInput::make('name')
+                    ->label('Nama Kategori')
+                    ->required()
+                    ->maxLength(255)
+                    ->live(onBlur: true)
+                    ->afterStateUpdated(fn (Set $set, ?string $state) => $set('slug', Str::slug($state))),
+                Forms\Components\TextInput::make('slug')
                     ->label('Slug')
                     ->required()
                     ->maxLength(255)
-                    ->placeholder('Masukkan slug kategori')
-                    ->unique(Category::class, 'slug', ignoreRecord: true)
-                    ->disabled()
-                    ->dehydrated(),
-                Select::make('parent_id')
-                    ->label('Induk Kategori')
-                    ->options(Category::pluck('name', 'id'))
+                    ->unique(Category::class, 'slug', ignoreRecord: true),
+                Forms\Components\Select::make('parent_id')
+                    ->label('Kategori Induk')
+                    ->relationship('parent', 'name')
                     ->searchable()
                     ->preload()
-                    ->nullable(),
-                Toggle::make('is_active')
+                    ->placeholder('Pilih Kategori Induk (Opsional)'),
+                Forms\Components\Toggle::make('is_active')
                     ->label('Aktif')
                     ->default(true)
-                    ->onIcon('heroicon-m-check-badge')
-                    ->offIcon('heroicon-m-x-circle'),
-
+                    ->required(),
             ]);
     }
 
@@ -70,61 +54,26 @@ class CategoryResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('name')
-                    ->label('Nama Kategori')
-                    ->searchable()
-                    ->sortable()
-                    ->formatStateUsing(fn (?string $state): string => $state ? Str::title($state) : '')
-                    ->toggleable(isToggledHiddenByDefault: false)
-                    ->wrap(),
-                TextColumn::make('slug')
-                    ->label('Slug')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->wrap(),
-                TextColumn::make('parent.name')
-                    ->label('Induk Kategori')
-                    ->sortable()
-                    ->formatStateUsing(fn (?string $state): string => $state ? Str::title($state) : '')
-                    ->toggleable(isToggledHiddenByDefault: false)
-                    ->wrap(),
-                BooleanColumn::make('is_active')
-                    // ... (konfigurasi is_active) ...
-                    ->label('Aktif')
-                    ->sortable(),
-                TextColumn::make('created_at')
-                    ->label('Dibuat Pada')
-                    ->formatStateUsing(fn ($state) => $state?->diffForHumans())
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: false)
-                    ->wrap(),
-                TextColumn::make('updated_at')
-                    ->label('Diperbarui Pada')
-                    ->formatStateUsing(fn ($state) => $state?->diffForHumans())
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->wrap(),
+                Tables\Columns\TextColumn::make('name')->label('Nama Kategori')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('slug')->label('Slug')->searchable(),
+                Tables\Columns\TextColumn::make('parent.name')->label('Induk')->default('-')->sortable(),
+                Tables\Columns\IconColumn::make('is_active')->label('Aktif')->boolean(),
+                Tables\Columns\TextColumn::make('created_at')->label('Dibuat Pada')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('parent_id')->relationship('parent', 'name')->label('Kategori Induk'),
+                Tables\Filters\TernaryFilter::make('is_active')->label('Status Aktif'),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
-    }
-
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
     }
 
     public static function getPages(): array

@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
@@ -12,45 +14,45 @@ class Product extends Model
     protected $fillable = [
         'seller_id',
         'category_id',
+        'unit_id', // Ditambahkan dari migrasi
         'name',
         'slug',
         'description',
         'price',
         'stock',
-        'is_active'
+        'is_active',
     ];
 
-    /**
-     * The relationships that should always be loaded.
-     *
-     * @var array
-     */
-    // Menambahkan 'seller' ke $with karena sering ditampilkan bersama data produk (misalnya di tabel).
-    protected $with = ['category', 'productImages', 'seller'];
+    protected function casts(): array
+    {
+        return [
+            'price' => 'decimal:2',
+            'is_active' => 'boolean',
+        ];
+    }
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array
-     */
-    protected $casts = [
-        'price' => 'decimal:2', // Penting untuk harga agar diperlakukan sebagai angka desimal.
-        'is_active' => 'boolean', // Mengubah nilai menjadi true/false.
-        'stock' => 'integer',   // Memastikan stok adalah angka integer.
-    ];
-
-    public function seller()
+    public function seller(): BelongsTo
     {
         return $this->belongsTo(User::class, 'seller_id');
     }
 
-    public function category()
+    public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
     }
 
-    public function productImages()
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class);
+    }
+
+    public function images(): HasMany
     {
         return $this->hasMany(ProductImage::class);
+    }
+
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
     }
 }
